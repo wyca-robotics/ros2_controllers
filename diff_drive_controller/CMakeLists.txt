@@ -92,10 +92,6 @@ if(BUILD_TESTING)
   )
   target_compile_definitions(test_load_diff_drive_controller PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
 
-  ament_add_gmock(
-    test_accumulator
-    test/test_accumulator.cpp
-  )
 endif()
 
 ament_export_dependencies(
