@@ -27,7 +27,6 @@
 #include "rclcpp/qos.hpp"
 #include "rclcpp/qos_event.hpp"
 #include "rclcpp/time.hpp"
-#include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rcpputils/split.hpp"
 #include "rcutils/logging_macros.h"
 #include "std_msgs/msg/header.hpp"
