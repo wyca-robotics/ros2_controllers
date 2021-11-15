@@ -88,6 +88,10 @@ CallbackReturn JointGroupPositionController::on_configure(
 {
   auto ret = ForwardCommandController::on_configure(previous_state);
 
+
+  callback_group_ = get_node()->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive, false);
+  callback_group_executor_.add_callback_group(callback_group_, get_node()->get_node_base_interface());
+
   fprintf(stderr, "got %zu joints\n", joint_names_.size());
   pids_.resize(joint_names_.size());
   std::string gains_prefix = "gains";
@@ -97,6 +101,37 @@ CallbackReturn JointGroupPositionController::on_configure(
     auto d = get_node()->get_parameter(gains_prefix + "." + joint_names_[k] + ".d").as_double();
     pids_[k].initPid(p, i, d, 0.0, 0.0);
     fprintf(stderr, "got gains for %s as (%f, %f, %f)\n", joint_names_[k].c_str(), p, i, d);
+  }
+
+
+  urdf::Model urdf;
+  rclcpp::Parameter urdf_string;
+
+  auto parameters_client = std::make_shared<rclcpp::AsyncParametersClient>(get_node(), "robot_state_publisher", rmw_qos_profile_parameters, callback_group_);
+  while (!parameters_client->wait_for_service(std::chrono::seconds(1))) {
+    if (!rclcpp::ok()) {
+      RCLCPP_ERROR(get_node()->get_logger(), "Interrupted while waiting for the service. Exiting.");
+      rclcpp::shutdown();
+    }
+  }
+
+  RCLCPP_INFO(get_node()->get_logger(), "Getting params");
+  auto get_results = parameters_client->get_parameters({"robot_description"});
+  callback_group_executor_.spin_until_future_complete(get_results);
+
+  if(!urdf.initString(get_results.get()[0].as_string())) {
+    RCLCPP_ERROR(get_node()->get_logger(), "Could not init URDF");
+    return CallbackReturn::ERROR;
+  }
+
+  for (size_t i = 0; i < joint_names_.size(); ++i) {
+    urdf::JointConstSharedPtr joint_urdf = urdf.getJoint(joint_names_[i]);
+    if (!joint_urdf)
+    {
+      RCLCPP_ERROR_STREAM(get_node()->get_logger(), "Could not find joint " << joint_names_[i].c_str() << " in urdf");
+      return CallbackReturn::ERROR;
+    }
+    joint_urdfs_.push_back(joint_urdf);
   }
 
   return ret;
@@ -138,7 +173,6 @@ controller_interface::return_type JointGroupPositionController::update(const rcl
   if (!joint_position_commands) {
     return controller_interface::return_type::OK;
   }
-  RCLCPP_INFO(get_node()->get_logger(), "joint_position_command received");
 
   if (joint_position_commands->data.size() != command_interfaces_.size()) {
     RCLCPP_ERROR_THROTTLE(
@@ -153,14 +187,29 @@ controller_interface::return_type JointGroupPositionController::update(const rcl
   {
     double command_position = joint_position_commands->data[i];
     double current_position = state_interfaces_[i].get_value();
-    RCLCPP_INFO_STREAM(get_node()->get_logger(), "Current position for joint " << i << ", " << current_position);
 
-    auto error = angles::shortest_angular_distance(current_position, command_position);
-    RCLCPP_INFO_STREAM(get_node()->get_logger(), "Current error " << i << ", " << error);
+
+    double error;
+    double commanded_effort;
+
+    if(joint_urdfs_[i]->type == urdf::Joint::REVOLUTE) {
+      angles::shortest_angular_distance_with_large_limits(
+        current_position,
+        command_position,
+        joint_urdfs_[i]->limits->lower,
+        joint_urdfs_[i]->limits->upper,
+        error);
+    } else if (joint_urdfs_[i]->type == urdf::Joint::CONTINUOUS) {
+      error = angles::shortest_angular_distance(current_position, command_position);
+    } else {
+      // Prismatic
+      error = command_position - current_position;
+
+    }
 
     // Set the PID error and compute the PID command with nonuniform
     // time step size.
-    auto commanded_effort = pids_[i].computeCommand(error, period_chrono);
+    commanded_effort = pids_[i].computeCommand(error, period_chrono);
 
     RCLCPP_INFO_STREAM(get_node()->get_logger(), "Command effort for joint " << i << ", " << commanded_effort);
     command_interfaces_[i].set_value(commanded_effort);

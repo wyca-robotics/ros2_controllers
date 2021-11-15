@@ -14,6 +14,7 @@
   <depend>control_toolbox</depend>
   <depend>forward_command_controller</depend>
   <depend>rclcpp</depend>
+  <depend>urdf</depend>
 
   <build_depend>pluginlib</build_depend>
 

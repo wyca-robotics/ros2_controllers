@@ -17,6 +17,7 @@ find_package(control_toolbox REQUIRED)
 find_package(forward_command_controller REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(urdf REQUIRED)
 
 add_library(effort_controllers
   SHARED
@@ -30,6 +31,7 @@ ament_target_dependencies(effort_controllers
   forward_command_controller
   pluginlib
   rclcpp
+  urdf
 )
 # Causes the visibility macros to use dllexport rather than dllimport,
 # which is appropriate when building the dll but not consuming it.

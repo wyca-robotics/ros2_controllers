@@ -21,6 +21,7 @@
 #include "control_toolbox/pid.hpp"
 #include "forward_command_controller/forward_command_controller.hpp"
 #include "effort_controllers/visibility_control.h"
+#include <urdf/model.h>
 
 namespace effort_controllers
 {
@@ -70,7 +71,10 @@ public:
 
 private:
   std::vector<control_toolbox::Pid> pids_;
+  std::vector<urdf::JointConstSharedPtr> joint_urdfs_;
   std::chrono::time_point<std::chrono::system_clock> t0;
+  rclcpp::CallbackGroup::SharedPtr callback_group_;
+  rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
 };
 
 }  // namespace effort_controllers
